@@ -4,6 +4,7 @@ import { BarChart3, Users, Package, AlertTriangle, TrendingUp, Eye, Download } f
 import toast from 'react-hot-toast';
 import axios from 'axios';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import API_URL from '../config/api';
 
 const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('overview');
@@ -23,10 +24,10 @@ const AdminDashboard = () => {
   const fetchDashboardData = async () => {
     try {
       const [statsRes, analyticsRes] = await Promise.all([
-        axios.get('http://localhost:5000/api/admin/dashboard', {
+        axios.get(`${API_URL}/api/admin/dashboard`, {
           headers: { Authorization: `Bearer ${token}` }
         }),
-        axios.get('http://localhost:5000/api/admin/analytics', {
+        axios.get(`${API_URL}/api/admin/analytics`, {
           headers: { Authorization: `Bearer ${token}` }
         })
       ]);
@@ -46,7 +47,7 @@ const AdminDashboard = () => {
 
   const fetchManufacturers = async () => {
     try {
-      const response = await axios.get('http://localhost:5000/api/admin/manufacturers', {
+      const response = await axios.get(`${API_URL}/api/admin/manufacturers`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (response.data.success) {
@@ -59,7 +60,7 @@ const AdminDashboard = () => {
 
   const fetchProducts = async () => {
     try {
-      const response = await axios.get('http://localhost:5000/api/admin/products', {
+      const response = await axios.get(`${API_URL}/api/admin/products`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (response.data.success) {
@@ -72,7 +73,7 @@ const AdminDashboard = () => {
 
   const fetchFakeReports = async () => {
     try {
-      const response = await axios.get('http://localhost:5000/api/admin/fake-reports', {
+      const response = await axios.get(`${API_URL}/api/admin/fake-reports`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (response.data.success) {

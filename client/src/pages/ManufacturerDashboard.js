@@ -4,6 +4,7 @@ import { Package, Plus, QrCode, Eye, Edit, Trash2, BarChart3, TrendingUp, Users,
 import toast from 'react-hot-toast';
 import axios from 'axios';
 import QRCode from 'qrcode';
+import API_URL from '../config/api';
 
 const ManufacturerDashboard = () => {
   const [activeTab, setActiveTab] = useState('overview');
@@ -39,7 +40,7 @@ const ManufacturerDashboard = () => {
 
   const fetchStats = async () => {
     try {
-      const response = await axios.get('http://localhost:5000/api/products/stats/dashboard', {
+      const response = await axios.get(`${API_URL}/api/products/stats/dashboard`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (response.data.success) {
@@ -52,7 +53,7 @@ const ManufacturerDashboard = () => {
 
   const fetchProducts = async () => {
     try {
-      const response = await axios.get('http://localhost:5000/api/products/my-products', {
+      const response = await axios.get(`${API_URL}/api/products/my-products`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (response.data.success) {
@@ -68,7 +69,7 @@ const ManufacturerDashboard = () => {
     setLoading(true);
 
     try {
-      const response = await axios.post('http://localhost:5000/api/products/add', formData, {
+      const response = await axios.post(`${API_URL}/api/products/add`, formData, {
         headers: { Authorization: `Bearer ${token}` }
       });
 

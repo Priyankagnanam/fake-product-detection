@@ -4,6 +4,7 @@ import { QrCode, Upload, Camera, CheckCircle, XCircle, AlertTriangle, Package, M
 import toast from 'react-hot-toast';
 import axios from 'axios';
 import QrScanner from 'qr-scanner';
+import API_URL from '../config/api';
 
 const CustomerVerification = () => {
   const [qrCode, setQrCode] = useState('');
@@ -27,7 +28,7 @@ const CustomerVerification = () => {
 
     setLoading(true);
     try {
-      const response = await axios.post('http://localhost:5000/api/verification/verify', {
+      const response = await axios.post(`${API_URL}/api/verification/verify`, {
         qrCode: qrCode.trim(),
         location: 'Customer Location',
         customerInfo: 'Anonymous Customer'
@@ -108,7 +109,7 @@ const CustomerVerification = () => {
 
     setLoading(true);
     try {
-      const response = await axios.post('http://localhost:5000/api/verification/report-fake', {
+      const response = await axios.post(`${API_URL}/api/verification/report-fake`, {
         qrCode: qrCode.trim(),
         ...reportData
       });

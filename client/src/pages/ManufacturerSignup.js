@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Shield, Lock, Mail, Building, Eye, EyeOff, User, Phone } from 'lucide-react';
 import toast from 'react-hot-toast';
 import axios from 'axios';
+import API_URL from '../config/api';
 
 const ManufacturerSignup = () => {
   const [formData, setFormData] = useState({
@@ -37,7 +38,7 @@ const ManufacturerSignup = () => {
     setLoading(true);
 
     try {
-      const response = await axios.post('http://localhost:5000/api/auth/manufacturer/signup', {
+      const response = await axios.post(`${API_URL}/api/auth/manufacturer/signup`, {
         companyName: formData.companyName,
         email: formData.email,
         password: formData.password,

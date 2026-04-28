@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: fake-product-detection-frontend
+    env: static
+    buildCommand: cd client && npm install && npm run build
+    staticPublishPath: client/build
+    envVars:
+      - key: REACT_APP_API_URL
+        value: https://fake-product-detection-backend.onrender.com
