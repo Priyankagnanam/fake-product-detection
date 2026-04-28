@@ -6,6 +6,20 @@ const { v4: uuidv4 } = require('uuid');
 const { body, validationResult } = require('express-validator');
 
 const router = express.Router();
+router.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Products API is working',
+    availableRoutes: [
+      'POST /api/products/add',
+      'GET /api/products/my-products',
+      'GET /api/products/:id',
+      'PUT /api/products/:id',
+      'DELETE /api/products/:id',
+      'GET /api/products/stats/dashboard'
+    ]
+  });
+});
 
 // Middleware to verify JWT token
 const authMiddleware = async (req, res, next) => {
