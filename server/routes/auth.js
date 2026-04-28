@@ -6,7 +6,7 @@ const { body, validationResult } = require('express-validator');
 
 const router = express.Router();
 
-// Generate JWT
+// ================= JWT =================
 const generateToken = (id) => {
   return jwt.sign(
     { id, role: 'manufacturer' },
@@ -15,75 +15,94 @@ const generateToken = (id) => {
   );
 };
 
-// ======================= SIGNUP =======================
-router.post('/manufacturer/signup', [
-  body('companyName').notEmpty(),
-  body('email').isEmail(),
-  body('password').isLength({ min: 6 }),
-  body('phone').notEmpty(),
-  body('address').notEmpty()
-], async (req, res) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ success: false, errors: errors.array() });
-    }
+// ================= SIGNUP =================
+router.post(
+  '/manufacturer/signup',
+  [
+    body('companyName').notEmpty(),
+    body('email').isEmail(),
+    body('password').isLength({ min: 6 }),
+    body('phone').notEmpty(),
+    body('address').notEmpty()
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation error',
+          errors: errors.array()
+        });
+      }
 
-    const { companyName, email, password, phone, address } = req.body;
+      const { companyName, email, password, phone, address } = req.body;
 
-    const existing = await Manufacturer.findOne({ where: { email } });
-    if (existing) {
-      return res.status(400).json({
-        success: false,
-        message: 'User already exists'
-      });
-    }
+      const existing = await Manufacturer.findOne({ where: { email } });
 
-    // ✅ HASH PASSWORD FIX
-    const hashedPassword = await bcrypt.hash(password, 10);
+      if (existing) {
+        return res.status(400).json({
+          success: false,
+          message: 'User already exists'
+        });
+      }
 
-    const manufacturer = await Manufacturer.create({
-      companyName,
-      email,
-      password: hashedPassword,
-      phone,
-      address
-    });
+      // hash password
+      const hashedPassword = await bcrypt.hash(password, 10);
 
-    const token = generateToken(manufacturer.id);
-
-    res.status(201).json({
-      success: true,
-      token,
-      user: {
-        id: manufacturer.id,
+      const manufacturer = await Manufacturer.create({
         companyName,
         email,
-        role: 'manufacturer'
-      }
-    });
+        password: hashedPassword,
+        phone,
+        address
+      });
 
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: 'Server error' });
+      const token = generateToken(manufacturer.id);
+
+      res.status(201).json({
+        success: true,
+        token,
+        user: {
+          id: manufacturer.id,
+          companyName,
+          email,
+          role: 'manufacturer'
+        }
+      });
+
+    } catch (err) {
+      console.error('Signup error:', err);
+      res.status(500).json({
+        success: false,
+        message: 'Server error during signup'
+      });
+    }
   }
-});
+);
 
-// ======================= LOGIN =======================
+// ================= LOGIN =================
 router.post('/manufacturer/login', async (req, res) => {
   try {
     const { email, password } = req.body;
 
     const user = await Manufacturer.findOne({ where: { email } });
+
     if (!user) {
-      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid credentials'
+      });
     }
 
-    // ✅ FIX PASSWORD CHECK
-    const isMatch = await bcrypt.compare(password, user.password);
+    // IMPORTANT: safe password check
+    const isMatch = await bcrypt.compare(password, user.password || '');
 
     if (!isMatch) {
-      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid credentials'
+      });
     }
 
     const token = generateToken(user.id);
@@ -100,8 +119,11 @@ router.post('/manufacturer/login', async (req, res) => {
     });
 
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: 'Server error' });
+    console.error('Login error:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Server error during login'
+    });
   }
 });
 
