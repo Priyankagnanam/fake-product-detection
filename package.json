@@ -1,0 +1,27 @@
+{
+  "name": "fake-product-detection-system",
+  "version": "1.0.0",
+  "description": "Modern web application for detecting fake products using QR codes",
+  "main": "server/index.js",
+  "scripts": {
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "cd server && npm run dev",
+    "client": "cd client && npm start",
+    "build": "cd client && npm run build",
+    "install-deps": "npm install && cd client && npm install && cd ../server && npm install"
+  },
+  "keywords": [
+    "fake-product-detection",
+    "qr-code",
+    "authentication",
+    "blockchain",
+    "react",
+    "nodejs",
+    "mongodb"
+  ],
+  "author": "Hackathon Team",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
