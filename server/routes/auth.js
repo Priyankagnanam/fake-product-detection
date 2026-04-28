@@ -1,178 +1,107 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 const Manufacturer = require('../models/Manufacturer');
 const { body, validationResult } = require('express-validator');
 
 const router = express.Router();
 
-// Generate JWT Token
+// Generate JWT
 const generateToken = (id) => {
-  return jwt.sign({ id, role: 'manufacturer' }, process.env.JWT_SECRET || 'fallback_secret', {
-    expiresIn: '30d'
-  });
+  return jwt.sign(
+    { id, role: 'manufacturer' },
+    process.env.JWT_SECRET || 'fallback_secret',
+    { expiresIn: '30d' }
+  );
 };
 
-// Manufacturer Signup
+// ======================= SIGNUP =======================
 router.post('/manufacturer/signup', [
-  body('companyName').trim().notEmpty().withMessage('Company name is required'),
-  body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
-  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
-  body('phone').notEmpty().withMessage('Phone number is required'),
-  body('address').notEmpty().withMessage('Address is required')
+  body('companyName').notEmpty(),
+  body('email').isEmail(),
+  body('password').isLength({ min: 6 }),
+  body('phone').notEmpty(),
+  body('address').notEmpty()
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation errors',
-        errors: errors.array()
-      });
+      return res.status(400).json({ success: false, errors: errors.array() });
     }
 
     const { companyName, email, password, phone, address } = req.body;
 
-    // Check if manufacturer already exists
-    const existingManufacturer = await Manufacturer.findOne({ where: { email } });
-    if (existingManufacturer) {
+    const existing = await Manufacturer.findOne({ where: { email } });
+    if (existing) {
       return res.status(400).json({
         success: false,
-        message: 'Manufacturer with this email already exists'
+        message: 'User already exists'
       });
     }
 
-    // Create new manufacturer
+    // ✅ HASH PASSWORD FIX
+    const hashedPassword = await bcrypt.hash(password, 10);
+
     const manufacturer = await Manufacturer.create({
       companyName,
       email,
-      password,
+      password: hashedPassword,
       phone,
       address
     });
 
-    // Generate token
     const token = generateToken(manufacturer.id);
 
     res.status(201).json({
       success: true,
-      message: 'Manufacturer registered successfully',
       token,
       user: {
         id: manufacturer.id,
-        companyName: manufacturer.companyName,
-        email: manufacturer.email,
+        companyName,
+        email,
         role: 'manufacturer'
       }
     });
-  } catch (error) {
-    console.error('Signup error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error during registration'
-    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 
-// Manufacturer Login
-router.post('/manufacturer/login', [
-  body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
-  body('password').notEmpty().withMessage('Password is required')
-], async (req, res) => {
+// ======================= LOGIN =======================
+router.post('/manufacturer/login', async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation errors',
-        errors: errors.array()
-      });
-    }
-
     const { email, password } = req.body;
 
-    // Find manufacturer
-    const manufacturer = await Manufacturer.findOne({ where: { email } });
-    if (!manufacturer) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid credentials'
-      });
+    const user = await Manufacturer.findOne({ where: { email } });
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
 
-    // Check password
-    const isPasswordValid = await manufacturer.comparePassword(password);
-    if (!isPasswordValid) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid credentials'
-      });
+    // ✅ FIX PASSWORD CHECK
+    const isMatch = await bcrypt.compare(password, user.password);
+
+    if (!isMatch) {
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
 
-    // Generate token
-    const token = generateToken(manufacturer.id);
+    const token = generateToken(user.id);
 
     res.json({
       success: true,
-      message: 'Login successful',
       token,
       user: {
-        id: manufacturer.id,
-        companyName: manufacturer.companyName,
-        email: manufacturer.email,
+        id: user.id,
+        companyName: user.companyName,
+        email: user.email,
         role: 'manufacturer'
       }
     });
-  } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error during login'
-    });
-  }
-});
 
-// Get manufacturer profile
-router.get('/manufacturer/profile', async (req, res) => {
-  try {
-    const token = req.header('Authorization')?.replace('Bearer ', '');
-    
-    if (!token) {
-      return res.status(401).json({
-        success: false,
-        message: 'Access denied. No token provided.'
-      });
-    }
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret');
-    const manufacturer = await Manufacturer.findByPk(decoded.id, {
-      attributes: { exclude: ['password'] }
-    });
-
-    if (!manufacturer) {
-      return res.status(404).json({
-        success: false,
-        message: 'Manufacturer not found'
-      });
-    }
-
-    res.json({
-      success: true,
-      user: {
-        id: manufacturer.id,
-        companyName: manufacturer.companyName,
-        email: manufacturer.email,
-        phone: manufacturer.phone,
-        address: manufacturer.address,
-        isVerified: manufacturer.isVerified,
-        role: 'manufacturer'
-      }
-    });
-  } catch (error) {
-    console.error('Profile error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error'
-    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 
