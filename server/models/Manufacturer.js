@@ -1,71 +1,66 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
 const bcrypt = require('bcryptjs');
+const sequelize = require('../config/database');
 
-const manufacturerSchema = new mongoose.Schema({
+const Manufacturer = sequelize.define('Manufacturer', {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true
+  },
   companyName: {
-    type: String,
-    required: true,
+    type: DataTypes.STRING,
+    allowNull: false,
     trim: true
   },
   email: {
-    type: String,
-    required: true,
+    type: DataTypes.STRING,
+    allowNull: false,
     unique: true,
     lowercase: true,
-    trim: true
+    trim: true,
+    validate: {
+      isEmail: true
+    }
   },
   password: {
-    type: String,
-    required: true,
-    minlength: 6
+    type: DataTypes.STRING,
+    allowNull: false,
+    validate: {
+      len: [6, 255]
+    }
   },
   phone: {
-    type: String,
-    required: true
+    type: DataTypes.STRING,
+    allowNull: false
   },
   address: {
-    type: String,
-    required: true
+    type: DataTypes.TEXT,
+    allowNull: false
   },
   isVerified: {
-    type: Boolean,
-    default: false
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
   },
-  verificationDocuments: [{
-    type: String
-  }],
-  products: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Product'
-  }],
-  createdAt: {
-    type: Date,
-    default: Date.now
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now
+  verificationDocuments: {
+    type: DataTypes.ARRAY(DataTypes.STRING),
+    defaultValue: []
   }
 }, {
-  timestamps: true
-});
-
-// Hash password before saving
-manufacturerSchema.pre('save', async function(next) {
-  if (!this.isModified('password')) return next();
-  
-  try {
-    const salt = await bcrypt.genSalt(10);
-    this.password = await bcrypt.hash(this.password, salt);
-    next();
-  } catch (error) {
-    next(error);
+  timestamps: true,
+  hooks: {
+    beforeSave: async (manufacturer) => {
+      if (manufacturer.changed('password')) {
+        const salt = await bcrypt.genSalt(10);
+        manufacturer.password = await bcrypt.hash(manufacturer.password, salt);
+      }
+    }
   }
 });
 
 // Compare password method
-manufacturerSchema.methods.comparePassword = async function(candidatePassword) {
+Manufacturer.prototype.comparePassword = async function(candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
-module.exports = mongoose.model('Manufacturer', manufacturerSchema);
+module.exports = Manufacturer;

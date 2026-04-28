@@ -25,9 +25,15 @@ router.post('/verify', [
 
     // Find product by QR code
     const product = await Product.findOne({
-      qrCode: qrCode.trim(),
-      isActive: true
-    }).populate('manufacturer', 'companyName email phone address');
+      where: {
+        qrCode: qrCode.trim(),
+        isActive: true
+      },
+      include: [{
+        model: Manufacturer,
+        attributes: ['companyName', 'email', 'phone', 'address']
+      }]
+    });
 
     if (!product) {
       return res.status(404).json({
@@ -54,27 +60,25 @@ router.post('/verify', [
     }
 
     // Update verification count and last verified date
-    product.verificationCount += 1;
-    product.lastVerified = new Date();
+    const newJourney = location || customerInfo ? [{
+      location: location || 'Unknown',
+      timestamp: new Date(),
+      status: 'verified',
+      scannedBy: customerInfo || 'Anonymous Customer'
+    }] : [];
 
-    // Add to journey
-    if (location || customerInfo) {
-      product.journey.push({
-        location: location || 'Unknown',
-        timestamp: new Date(),
-        status: 'verified',
-        scannedBy: customerInfo || 'Anonymous Customer'
-      });
-    }
-
-    await product.save();
+    await product.update({
+      verificationCount: product.verificationCount + 1,
+      lastVerified: new Date(),
+      journey: [...product.journey, ...newJourney]
+    });
 
     res.json({
       success: true,
       isGenuine: true,
       message: 'Product is genuine',
       product: {
-        id: product._id,
+        id: product.id,
         productName: product.productName,
         brandName: product.brandName,
         manufacturingDate: product.manufacturingDate,
@@ -84,8 +88,8 @@ router.post('/verify', [
         description: product.description,
         specifications: product.specifications,
         manufacturer: product.manufacturer,
-        verificationCount: product.verificationCount,
-        lastVerified: product.lastVerified
+        verificationCount: product.verificationCount + 1,
+        lastVerified: new Date()
       }
     });
   } catch (error) {
@@ -118,8 +122,10 @@ router.post('/report-fake', [
 
     // Find product by QR code
     const product = await Product.findOne({
-      qrCode: qrCode.trim(),
-      isActive: true
+      where: {
+        qrCode: qrCode.trim(),
+        isActive: true
+      }
     });
 
     if (!product) {
@@ -130,27 +136,30 @@ router.post('/report-fake', [
     }
 
     // Add fake report
-    product.fakeReports.push({
+    const newFakeReport = {
       reportedBy: reporterInfo,
       reportedAt: new Date(),
       reason,
       description
-    });
+    };
 
     // Add to journey
-    product.journey.push({
+    const newJourneyEntry = {
       location: 'Unknown',
       timestamp: new Date(),
       status: 'reported_as_fake',
       scannedBy: reporterInfo
-    });
+    };
 
-    await product.save();
+    await product.update({
+      fakeReports: [...product.fakeReports, newFakeReport],
+      journey: [...product.journey, newJourneyEntry]
+    });
 
     res.json({
       success: true,
       message: 'Fake product report submitted successfully',
-      reportId: product.fakeReports[product.fakeReports.length - 1]._id
+      reportId: newFakeReport.reportedAt.getTime()
     });
   } catch (error) {
     console.error('Report fake error:', error);
@@ -164,9 +173,13 @@ router.post('/report-fake', [
 // Get product journey
 router.get('/journey/:productId', async (req, res) => {
   try {
-    const product = await Product.findById(req.params.productId)
-      .populate('manufacturer', 'companyName')
-      .select('productName brandName journey createdAt');
+    const product = await Product.findByPk(req.params.productId, {
+      include: [{
+        model: Manufacturer,
+        attributes: ['companyName']
+      }],
+      attributes: ['productName', 'brandName', 'journey', 'createdAt']
+    });
 
     if (!product) {
       return res.status(404).json({
@@ -178,7 +191,7 @@ router.get('/journey/:productId', async (req, res) => {
     res.json({
       success: true,
       product: {
-        id: product._id,
+        id: product.id,
         productName: product.productName,
         brandName: product.brandName,
         manufacturer: product.manufacturer,
@@ -201,11 +214,16 @@ router.get('/public/:qrCode', async (req, res) => {
     const { qrCode } = req.params;
 
     const product = await Product.findOne({
-      qrCode: qrCode.trim(),
-      isActive: true
-    })
-    .populate('manufacturer', 'companyName')
-    .select('productName brandName manufacturingDate expiryDate batchNumber category verificationCount lastVerified');
+      where: {
+        qrCode: qrCode.trim(),
+        isActive: true
+      },
+      include: [{
+        model: Manufacturer,
+        attributes: ['companyName']
+      }],
+      attributes: ['productName', 'brandName', 'manufacturingDate', 'expiryDate', 'batchNumber', 'category', 'verificationCount', 'lastVerified']
+    });
 
     if (!product) {
       return res.status(404).json({

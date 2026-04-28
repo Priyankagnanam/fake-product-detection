@@ -1,97 +1,93 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/database');
 
-const productSchema = new mongoose.Schema({
+const Product = sequelize.define('Product', {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true
+  },
   qrCode: {
-    type: String,
+    type: DataTypes.STRING,
     unique: true
   },
   productName: {
-    type: String,
-    required: true
+    type: DataTypes.STRING,
+    allowNull: false
   },
   brandName: {
-    type: String,
-    required: true
+    type: DataTypes.STRING,
+    allowNull: false
   },
   manufacturingDate: {
-    type: Date,
-    required: true
+    type: DataTypes.DATE,
+    allowNull: false
   },
   expiryDate: {
-    type: Date,
-    required: true
+    type: DataTypes.DATE,
+    allowNull: false
   },
   batchNumber: {
-    type: String,
-    required: true
+    type: DataTypes.STRING,
+    allowNull: false
   },
-  manufacturer: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Manufacturer',
-    required: true
+  manufacturerId: {
+    type: DataTypes.UUID,
+    allowNull: false,
+    references: {
+      model: 'Manufacturers',
+      key: 'id'
+    }
   },
   category: {
-    type: String,
-    required: true
+    type: DataTypes.STRING,
+    allowNull: false
   },
   description: {
-    type: String
+    type: DataTypes.TEXT
   },
   price: {
-    type: Number,
-    required: true
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: false
   },
-  images: [{
-    type: String
-  }],
+  images: {
+    type: DataTypes.ARRAY(DataTypes.STRING),
+    defaultValue: []
+  },
   specifications: {
-    weight: String,
-    dimensions: String,
-    color: String,
-    size: String
+    type: DataTypes.JSONB,
+    defaultValue: {}
   },
   isActive: {
-    type: Boolean,
-    default: true
+    type: DataTypes.BOOLEAN,
+    defaultValue: true
   },
   isVerified: {
-    type: Boolean,
-    default: false
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
   },
   verificationCount: {
-    type: Number,
-    default: 0
+    type: DataTypes.INTEGER,
+    defaultValue: 0
   },
   lastVerified: {
-    type: Date
+    type: DataTypes.DATE
   },
-  journey: [{
-    location: String,
-    timestamp: Date,
-    status: String,
-    scannedBy: String
-  }],
-  fakeReports: [{
-    reportedBy: String,
-    reportedAt: Date,
-    reason: String,
-    description: String
-  }],
-  createdAt: {
-    type: Date,
-    default: Date.now
+  journey: {
+    type: DataTypes.JSONB,
+    defaultValue: []
   },
-  updatedAt: {
-    type: Date,
-    default: Date.now
+  fakeReports: {
+    type: DataTypes.JSONB,
+    defaultValue: []
   }
 }, {
-  timestamps: true
+  timestamps: true,
+  indexes: [
+    { unique: true, fields: ['qrCode'] },
+    { fields: ['manufacturerId'] },
+    { fields: ['isActive'] }
+  ]
 });
 
-// Index for faster queries
-productSchema.index({ qrCode: 1 });
-productSchema.index({ manufacturer: 1 });
-productSchema.index({ isActive: 1 });
-
-module.exports = mongoose.model('Product', productSchema);
+module.exports = Product;

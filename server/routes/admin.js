@@ -32,53 +32,51 @@ const adminAuth = async (req, res, next) => {
 // Get dashboard statistics
 router.get('/dashboard', adminAuth, async (req, res) => {
   try {
-    const totalManufacturers = await Manufacturer.countDocuments();
-    const totalProducts = await Product.countDocuments({ isActive: true });
-    const totalVerifications = await Product.aggregate([
-      { $match: { isActive: true } },
-      { $group: { _id: null, total: { $sum: '$verificationCount' } } }
-    ]);
+    const totalManufacturers = await Manufacturer.count();
+    const totalProducts = await Product.count({ where: { isActive: true } });
     
-    const fakeReports = await Product.aggregate([
-      { $match: { isActive: true } },
-      { $project: { fakeReportCount: { $size: '$fakeReports' } } },
-      { $group: { _id: null, total: { $sum: '$fakeReportCount' } } }
-    ]);
+    const products = await Product.findAll({
+      where: { isActive: true },
+      attributes: ['verificationCount', 'fakeReports']
+    });
+    
+    const totalVerifications = products.reduce((sum, p) => sum + (p.verificationCount || 0), 0);
+    const fakeReports = products.reduce((sum, p) => sum + (p.fakeReports?.length || 0), 0);
 
-    const recentProducts = await Product.find({ isActive: true })
-      .populate('manufacturer', 'companyName')
-      .sort({ createdAt: -1 })
-      .limit(10)
-      .select('productName brandName createdAt verificationCount fakeReports');
+    const recentProducts = await Product.findAll({
+      where: { isActive: true },
+      include: [{
+        model: Manufacturer,
+        attributes: ['companyName']
+      }],
+      order: [['createdAt', 'DESC']],
+      limit: 10,
+      attributes: ['productName', 'brandName', 'createdAt', 'verificationCount', 'fakeReports']
+    });
 
-    const topManufacturers = await Manufacturer.aggregate([
-      {
-        $lookup: {
-          from: 'products',
-          localField: '_id',
-          foreignField: 'manufacturer',
-          as: 'products'
-        }
-      },
-      {
-        $project: {
-          companyName: 1,
-          email: 1,
-          productCount: { $size: '$products' },
-          totalVerifications: { $sum: '$products.verificationCount' }
-        }
-      },
-      { $sort: { productCount: -1 } },
-      { $limit: 5 }
-    ]);
+    const manufacturers = await Manufacturer.findAll({
+      include: [{
+        model: Product,
+        where: { isActive: true },
+        required: false
+      }]
+    });
+
+    const topManufacturers = manufacturers
+      .map(m => ({
+        ...m.toJSON(),
+        productCount: m.products?.length || 0
+      }))
+      .sort((a, b) => b.productCount - a.productCount)
+      .slice(0, 5);
 
     res.json({
       success: true,
       stats: {
         totalManufacturers,
         totalProducts,
-        totalVerifications: totalVerifications[0]?.total || 0,
-        fakeReports: fakeReports[0]?.total || 0,
+        totalVerifications,
+        fakeReports,
         recentProducts,
         topManufacturers
       }
@@ -97,33 +95,35 @@ router.get('/manufacturers', adminAuth, async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
-    const skip = (page - 1) * limit;
+    const offset = (page - 1) * limit;
 
-    const manufacturers = await Manufacturer.find({})
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .select('-password');
+    const manufacturers = await Manufacturer.findAll({
+      order: [['createdAt', 'DESC']],
+      offset: offset,
+      limit: limit,
+      attributes: { exclude: ['password'] }
+    });
 
-    const total = await Manufacturer.countDocuments();
+    const total = await Manufacturer.count();
 
     // Get product counts for each manufacturer
     const manufacturersWithStats = await Promise.all(
       manufacturers.map(async (manufacturer) => {
-        const productCount = await Product.countDocuments({
-          manufacturer: manufacturer._id,
-          isActive: true
+        const products = await Product.findAll({
+          where: {
+            manufacturerId: manufacturer.id,
+            isActive: true
+          },
+          attributes: ['verificationCount']
         });
-        
-        const totalVerifications = await Product.aggregate([
-          { $match: { manufacturer: manufacturer._id, isActive: true } },
-          { $group: { _id: null, total: { $sum: '$verificationCount' } } }
-        ]);
+
+        const productCount = products.length;
+        const totalVerifications = products.reduce((sum, p) => sum + (p.verificationCount || 0), 0);
 
         return {
-          ...manufacturer.toObject(),
+          ...manufacturer.toJSON(),
           productCount,
-          totalVerifications: totalVerifications[0]?.total || 0
+          totalVerifications
         };
       })
     );
@@ -151,15 +151,20 @@ router.get('/products', adminAuth, async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
-    const skip = (page - 1) * limit;
+    const offset = (page - 1) * limit;
 
-    const products = await Product.find({ isActive: true })
-      .populate('manufacturer', 'companyName email')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
+    const products = await Product.findAll({
+      where: { isActive: true },
+      include: [{
+        model: Manufacturer,
+        attributes: ['companyName', 'email']
+      }],
+      order: [['createdAt', 'DESC']],
+      offset: offset,
+      limit: limit
+    });
 
-    const total = await Product.countDocuments({ isActive: true });
+    const total = await Product.count({ where: { isActive: true } });
 
     res.json({
       success: true,
@@ -184,41 +189,47 @@ router.get('/fake-reports', adminAuth, async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
-    const skip = (page - 1) * limit;
+    const offset = (page - 1) * limit;
 
-    const productsWithFakeReports = await Product.find({
-      isActive: true,
-      'fakeReports.0': { $exists: true }
-    })
-    .populate('manufacturer', 'companyName email')
-    .sort({ 'fakeReports.reportedAt': -1 })
-    .skip(skip)
-    .limit(limit);
-
-    const total = await Product.countDocuments({
-      isActive: true,
-      'fakeReports.0': { $exists: true }
+    const productsWithFakeReports = await Product.findAll({
+      where: { isActive: true },
+      include: [{
+        model: Manufacturer,
+        attributes: ['companyName', 'email']
+      }],
+      order: [['createdAt', 'DESC']],
+      offset: offset,
+      limit: limit
     });
 
-    // Flatten fake reports for easier display
+    // Filter products with fake reports and flatten
     const fakeReports = [];
     productsWithFakeReports.forEach(product => {
-      product.fakeReports.forEach(report => {
-        fakeReports.push({
-          ...report.toObject(),
-          product: {
-            id: product._id,
-            name: product.productName,
-            brand: product.brandName,
-            manufacturer: product.manufacturer
-          }
+      if (product.fakeReports && product.fakeReports.length > 0) {
+        product.fakeReports.forEach(report => {
+          fakeReports.push({
+            ...report,
+            product: {
+              id: product.id,
+              name: product.productName,
+              brand: product.brandName,
+              manufacturer: product.manufacturer
+            }
+          });
         });
-      });
+      }
     });
+
+    // Sort by reported date
+    fakeReports.sort((a, b) => new Date(b.reportedAt) - new Date(a.reportedAt));
+
+    // Paginate the flattened reports
+    const paginatedReports = fakeReports.slice(offset, offset + limit);
+    const total = fakeReports.length;
 
     res.json({
       success: true,
-      fakeReports: fakeReports.sort((a, b) => new Date(b.reportedAt) - new Date(a.reportedAt)),
+      fakeReports: paginatedReports,
       pagination: {
         current: page,
         total: Math.ceil(total / limit),
@@ -238,59 +249,72 @@ router.get('/fake-reports', adminAuth, async (req, res) => {
 router.get('/analytics', adminAuth, async (req, res) => {
   try {
     // Daily verifications for last 30 days
-    const dailyVerifications = await Product.aggregate([
-      { $match: { isActive: true } },
-      { $unwind: '$journey' },
-      { $match: { 'journey.status': 'verified' } },
-      {
-        $group: {
-          _id: { $dateToString: { format: '%Y-%m-%d', date: '$journey.timestamp' } },
-          count: { $sum: 1 }
-        }
-      },
-      { $sort: { '_id': 1 } },
-      { $limit: 30 }
-    ]);
+    const products = await Product.findAll({
+      where: { isActive: true },
+      attributes: ['journey']
+    });
+
+    const dailyVerifications = {};
+    products.forEach(product => {
+      if (product.journey) {
+        product.journey.forEach(entry => {
+          if (entry.status === 'verified') {
+            const date = new Date(entry.timestamp).toISOString().split('T')[0];
+            dailyVerifications[date] = (dailyVerifications[date] || 0) + 1;
+          }
+        });
+      }
+    });
+
+    const dailyVerificationsArray = Object.entries(dailyVerifications)
+      .map(([date, count]) => ({ _id: date, count }))
+      .sort((a, b) => a._id.localeCompare(b._id))
+      .slice(-30);
 
     // Products by category
-    const productsByCategory = await Product.aggregate([
-      { $match: { isActive: true } },
-      {
-        $group: {
-          _id: '$category',
-          count: { $sum: 1 }
-        }
-      },
-      { $sort: { count: -1 } }
-    ]);
+    const allProducts = await Product.findAll({
+      where: { isActive: true },
+      attributes: ['category']
+    });
+
+    const productsByCategory = {};
+    allProducts.forEach(product => {
+      productsByCategory[product.category] = (productsByCategory[product.category] || 0) + 1;
+    });
+
+    const productsByCategoryArray = Object.entries(productsByCategory)
+      .map(([category, count]) => ({ _id: category, count }))
+      .sort((a, b) => b.count - a.count);
 
     // Top verified products
-    const topVerifiedProducts = await Product.find({ isActive: true })
-      .populate('manufacturer', 'companyName')
-      .sort({ verificationCount: -1 })
-      .limit(10)
-      .select('productName brandName verificationCount manufacturer');
+    const topVerifiedProducts = await Product.findAll({
+      where: { isActive: true },
+      order: [['verificationCount', 'DESC']],
+      limit: 10,
+      attributes: ['productName', 'brandName', 'verificationCount']
+    });
 
     // Fake reports by reason
-    const fakeReportsByReason = await Product.aggregate([
-      { $match: { isActive: true } },
-      { $unwind: '$fakeReports' },
-      {
-        $group: {
-          _id: '$fakeReports.reason',
-          count: { $sum: 1 }
-        }
-      },
-      { $sort: { count: -1 } }
-    ]);
+    const fakeReportsByReason = {};
+    products.forEach(product => {
+      if (product.fakeReports) {
+        product.fakeReports.forEach(report => {
+          fakeReportsByReason[report.reason] = (fakeReportsByReason[report.reason] || 0) + 1;
+        });
+      }
+    });
+
+    const fakeReportsByReasonArray = Object.entries(fakeReportsByReason)
+      .map(([reason, count]) => ({ _id: reason, count }))
+      .sort((a, b) => b.count - a.count);
 
     res.json({
       success: true,
       analytics: {
-        dailyVerifications,
-        productsByCategory,
+        dailyVerifications: dailyVerificationsArray,
+        productsByCategory: productsByCategoryArray,
         topVerifiedProducts,
-        fakeReportsByReason
+        fakeReportsByReason: fakeReportsByReasonArray
       }
     });
   } catch (error) {

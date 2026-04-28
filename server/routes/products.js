@@ -70,7 +70,7 @@ router.post('/add', authMiddleware, [
     } = req.body;
 
     // Create product without QR code first
-    const product = new Product({
+    const product = await Product.create({
       productName,
       brandName,
       manufacturingDate: new Date(manufacturingDate),
@@ -80,26 +80,23 @@ router.post('/add', authMiddleware, [
       batchNumber,
       description,
       specifications: specifications || {},
-      manufacturer: req.manufacturerId
+      manufacturerId: req.manufacturerId
     });
 
-    await product.save();
-
     // Generate QR code for the product
-    const { qrData, qrCodeDataURL } = await generateQRCode(product._id);
+    const { qrData, qrCodeDataURL } = await generateQRCode(product.id);
     
     // Update product with QR code
-    product.qrCode = qrData;
-    await product.save();
+    await product.update({ qrCode: qrData });
 
     res.status(201).json({
       success: true,
       message: 'Product added successfully',
       product: {
-        id: product._id,
+        id: product.id,
         productName: product.productName,
         brandName: product.brandName,
-        qrCode: product.qrCode,
+        qrCode: qrData,
         qrCodeImage: qrCodeDataURL,
         manufacturingDate: product.manufacturingDate,
         expiryDate: product.expiryDate,
@@ -126,18 +123,22 @@ router.get('/my-products', authMiddleware, async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
-    const products = await Product.find({ 
-      manufacturer: req.manufacturerId,
-      isActive: true 
-    })
-    .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(limit)
-    .select('-journey -fakeReports');
+    const products = await Product.findAll({ 
+      where: { 
+        manufacturerId: req.manufacturerId,
+        isActive: true 
+      },
+      order: [['createdAt', 'DESC']],
+      offset: skip,
+      limit: limit,
+      attributes: { exclude: ['journey', 'fakeReports'] }
+    });
 
-    const total = await Product.countDocuments({ 
-      manufacturer: req.manufacturerId,
-      isActive: true 
+    const total = await Product.count({ 
+      where: { 
+        manufacturerId: req.manufacturerId,
+        isActive: true 
+      }
     });
 
     res.json({
@@ -162,9 +163,15 @@ router.get('/my-products', authMiddleware, async (req, res) => {
 router.get('/:id', authMiddleware, async (req, res) => {
   try {
     const product = await Product.findOne({
-      _id: req.params.id,
-      manufacturer: req.manufacturerId
-    }).populate('manufacturer', 'companyName email');
+      where: {
+        id: req.params.id,
+        manufacturerId: req.manufacturerId
+      },
+      include: [{
+        model: Manufacturer,
+        attributes: ['companyName', 'email']
+      }]
+    });
 
     if (!product) {
       return res.status(404).json({
@@ -203,8 +210,10 @@ router.put('/:id', authMiddleware, [
     }
 
     const product = await Product.findOne({
-      _id: req.params.id,
-      manufacturer: req.manufacturerId
+      where: {
+        id: req.params.id,
+        manufacturerId: req.manufacturerId
+      }
     });
 
     if (!product) {
@@ -224,11 +233,10 @@ router.put('/:id', authMiddleware, [
       }
     });
 
-    const updatedProduct = await Product.findByIdAndUpdate(
-      req.params.id,
-      { ...updates, updatedAt: new Date() },
-      { new: true, runValidators: true }
-    );
+    await product.update({ ...updates, updatedAt: new Date() });
+    const updatedProduct = await Product.findOne({
+      where: { id: req.params.id }
+    });
 
     res.json({
       success: true,
@@ -248,8 +256,10 @@ router.put('/:id', authMiddleware, [
 router.delete('/:id', authMiddleware, async (req, res) => {
   try {
     const product = await Product.findOne({
-      _id: req.params.id,
-      manufacturer: req.manufacturerId
+      where: {
+        id: req.params.id,
+        manufacturerId: req.manufacturerId
+      }
     });
 
     if (!product) {
@@ -259,8 +269,7 @@ router.delete('/:id', authMiddleware, async (req, res) => {
       });
     }
 
-    product.isActive = false;
-    await product.save();
+    await product.update({ isActive: false });
 
     res.json({
       success: true,
@@ -278,36 +287,47 @@ router.delete('/:id', authMiddleware, async (req, res) => {
 // Get product statistics
 router.get('/stats/dashboard', authMiddleware, async (req, res) => {
   try {
-    const totalProducts = await Product.countDocuments({
-      manufacturer: req.manufacturerId,
-      isActive: true
+    const totalProducts = await Product.count({
+      where: {
+        manufacturerId: req.manufacturerId,
+        isActive: true
+      }
     });
 
-    const verifiedProducts = await Product.countDocuments({
-      manufacturer: req.manufacturerId,
-      isActive: true,
-      isVerified: true
+    const verifiedProducts = await Product.count({
+      where: {
+        manufacturerId: req.manufacturerId,
+        isActive: true,
+        isVerified: true
+      }
     });
 
-    const totalVerifications = await Product.aggregate([
-      { $match: { manufacturer: req.manufacturerId, isActive: true } },
-      { $group: { _id: null, total: { $sum: '$verificationCount' } } }
-    ]);
+    const products = await Product.findAll({
+      where: {
+        manufacturerId: req.manufacturerId,
+        isActive: true
+      },
+      attributes: ['verificationCount']
+    });
 
-    const recentProducts = await Product.find({
-      manufacturer: req.manufacturerId,
-      isActive: true
-    })
-    .sort({ createdAt: -1 })
-    .limit(5)
-    .select('productName brandName createdAt verificationCount');
+    const totalVerifications = products.reduce((sum, p) => sum + (p.verificationCount || 0), 0);
+
+    const recentProducts = await Product.findAll({
+      where: {
+        manufacturerId: req.manufacturerId,
+        isActive: true
+      },
+      order: [['createdAt', 'DESC']],
+      limit: 5,
+      attributes: ['productName', 'brandName', 'createdAt', 'verificationCount']
+    });
 
     res.json({
       success: true,
       stats: {
         totalProducts,
         verifiedProducts,
-        totalVerifications: totalVerifications[0]?.total || 0,
+        totalVerifications,
         recentProducts
       }
     });

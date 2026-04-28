@@ -33,7 +33,7 @@ router.post('/manufacturer/signup', [
     const { companyName, email, password, phone, address } = req.body;
 
     // Check if manufacturer already exists
-    const existingManufacturer = await Manufacturer.findOne({ email });
+    const existingManufacturer = await Manufacturer.findOne({ where: { email } });
     if (existingManufacturer) {
       return res.status(400).json({
         success: false,
@@ -42,7 +42,7 @@ router.post('/manufacturer/signup', [
     }
 
     // Create new manufacturer
-    const manufacturer = new Manufacturer({
+    const manufacturer = await Manufacturer.create({
       companyName,
       email,
       password,
@@ -50,17 +50,15 @@ router.post('/manufacturer/signup', [
       address
     });
 
-    await manufacturer.save();
-
     // Generate token
-    const token = generateToken(manufacturer._id);
+    const token = generateToken(manufacturer.id);
 
     res.status(201).json({
       success: true,
       message: 'Manufacturer registered successfully',
       token,
       user: {
-        id: manufacturer._id,
+        id: manufacturer.id,
         companyName: manufacturer.companyName,
         email: manufacturer.email,
         role: 'manufacturer'
@@ -93,7 +91,7 @@ router.post('/manufacturer/login', [
     const { email, password } = req.body;
 
     // Find manufacturer
-    const manufacturer = await Manufacturer.findOne({ email });
+    const manufacturer = await Manufacturer.findOne({ where: { email } });
     if (!manufacturer) {
       return res.status(401).json({
         success: false,
@@ -111,14 +109,14 @@ router.post('/manufacturer/login', [
     }
 
     // Generate token
-    const token = generateToken(manufacturer._id);
+    const token = generateToken(manufacturer.id);
 
     res.json({
       success: true,
       message: 'Login successful',
       token,
       user: {
-        id: manufacturer._id,
+        id: manufacturer.id,
         companyName: manufacturer.companyName,
         email: manufacturer.email,
         role: 'manufacturer'
@@ -146,7 +144,9 @@ router.get('/manufacturer/profile', async (req, res) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret');
-    const manufacturer = await Manufacturer.findById(decoded.id).select('-password');
+    const manufacturer = await Manufacturer.findByPk(decoded.id, {
+      attributes: { exclude: ['password'] }
+    });
 
     if (!manufacturer) {
       return res.status(404).json({
@@ -158,7 +158,7 @@ router.get('/manufacturer/profile', async (req, res) => {
     res.json({
       success: true,
       user: {
-        id: manufacturer._id,
+        id: manufacturer.id,
         companyName: manufacturer.companyName,
         email: manufacturer.email,
         phone: manufacturer.phone,

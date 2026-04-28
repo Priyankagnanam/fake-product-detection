@@ -1,48 +1,43 @@
-# 🚀 Render Deployment Guide
+# 🚀 Render Deployment Guide (PostgreSQL Version)
 
-This guide will help you deploy the Fake Product Detection System to Render.
+This guide will help you deploy the Fake Product Detection System to Render using PostgreSQL for free deployment.
 
 ## 📋 Prerequisites
 
 - GitHub account with the repository: https://github.com/Priyankagnanam/fake-product-detection
 - Render account (free tier available at https://render.com)
-- MongoDB Atlas account (free tier available)
 
-## 🗄️ Step 1: Set Up MongoDB Atlas
+## 🗄️ Step 1: Set Up PostgreSQL on Render
 
-### Create MongoDB Atlas Cluster
+Render provides free PostgreSQL databases. You don't need to set up an external database.
 
-1. Go to https://www.mongodb.com/atlas
-2. Sign up for a free account
-3. Click **"Build a Database"**
-4. Choose **"Free"** plan (M0 Sandbox)
-5. Select a cloud provider and region (choose one close to your users)
-6. Name your cluster (e.g., `fake-product-detection`)
-7. Click **"Create"**
-8. Wait for cluster creation (2-5 minutes)
+### Create PostgreSQL Database
 
-### Configure Database Access
+1. Go to https://render.com
+2. Click **"New +"** → **"PostgreSQL"**
+3. Configure the database:
 
-1. Go to **Database Access** → **Add New Database User**
-2. Username: `fakeguard` (or your preferred username)
-3. Password: Generate a strong password (save this!)
-4. Database User Privileges: Read and write to any database
-5. Click **"Add User"**
+**Name:** `fake-product-detection-db`
 
-### Configure Network Access
+**Database:** `fake_product_detection`
 
-1. Go to **Network Access** → **Add IP Address**
-2. Select **"Allow Access from Anywhere"** (0.0.0.0/0)
-3. Click **"Confirm"**
+**User:** `fakeguard` (or your preferred username)
 
-### Get Connection String
+**Region:** Choose a region (e.g., Oregon)
 
-1. Go to **Database** → Click **"Connect"** on your cluster
-2. Choose **"Connect your application"**
-3. Select **Node.js** and version **4.1 or later**
-4. Copy the connection string (it looks like: `mongodb+srv://fakeguard:password@cluster.mongodb.net/fake-product-detection`)
-5. Replace `<password>` with your actual password
-6. Save this connection string for Render setup
+**Plan:** Select **Free** tier
+
+4. Click **"Create Database"**
+5. Wait for database creation (1-2 minutes)
+
+### Get Database Connection String
+
+1. Once created, click on your database
+2. Go to **"Connect"** → **"External Connection"**
+3. Copy the **Internal Database URL** (it looks like: `postgres://fakeguard:password@dpg-xxxxx.oregon-postgres.render.com/fake_product_detection`)
+4. Save this connection string for backend setup
+
+**Note:** Render will automatically provide the `DATABASE_URL` environment variable to your backend service when they're in the same region.
 
 ## 🌐 Step 2: Deploy Backend to Render
 
@@ -78,8 +73,10 @@ Add the following environment variables:
 
 1. **PORT:** `5000`
 2. **NODE_ENV:** `production`
-3. **MONGODB_URI:** (Paste your MongoDB Atlas connection string from Step 1)
+3. **DATABASE_URL:** (Paste your PostgreSQL connection string from Step 1, or leave empty if using Render's automatic database linking)
 4. **JWT_SECRET:** (Generate a strong random string, e.g., using: `openssl rand -base64 32`)
+
+**Important:** If your PostgreSQL database and backend service are in the same region on Render, you can leave `DATABASE_URL` empty and Render will automatically link them. Otherwise, use the connection string from Step 1.
 
 ### Deploy
 
@@ -124,7 +121,20 @@ Add the following environment variable:
 2. Wait for deployment (3-5 minutes)
 3. Once deployed, copy the frontend URL
 
-## 🔗 Step 4: Update Frontend API URL
+## 🔗 Step 4: Link Backend to PostgreSQL Database
+
+If you created the PostgreSQL database and backend service in the same region:
+
+1. Go to your backend service on Render
+2. Click **"Environment"**
+3. Scroll down to **"Databases"** section
+4. Click **"Connect Database"**
+5. Select your PostgreSQL database (`fake-product-detection-db`)
+6. Render will automatically add the `DATABASE_URL` environment variable
+
+If they're in different regions, manually add the `DATABASE_URL` from Step 1.
+
+## 🔗 Step 5: Update Frontend API URL
 
 After deploying the backend, you may need to update the frontend's API URL:
 
@@ -134,7 +144,7 @@ After deploying the backend, you may need to update the frontend's API URL:
 4. Click **"Save Changes"**
 5. Render will automatically redeploy the frontend
 
-## ✅ Step 5: Test Your Live Application
+## ✅ Step 6: Test Your Live Application
 
 1. Open your frontend URL in a browser
 2. Test manufacturer registration
@@ -157,11 +167,13 @@ After successful deployment, you'll have:
 **Issue:** Build fails
 - Check the build logs in Render dashboard
 - Ensure all dependencies are in `server/package.json`
+- Verify Sequelize and pg packages are installed
 
 **Issue:** Database connection error
-- Verify MongoDB Atlas connection string is correct
-- Check Network Access allows 0.0.0.0/0
+- Verify PostgreSQL connection string is correct
+- Check if database and backend are in the same region
 - Ensure database user has correct permissions
+- Check if `DATABASE_URL` environment variable is set
 
 **Issue:** Port already in use
 - Render automatically assigns ports, don't hardcode port 5000
@@ -184,6 +196,12 @@ After successful deployment, you'll have:
 - Check both services are in the same region
 - Verify environment variables are correct
 - Check Render logs for errors
+- Ensure PostgreSQL database is linked to backend
+
+**Issue:** Database not syncing
+- Check Sequelize sync is working
+- Verify database tables are created
+- Check database logs in Render dashboard
 
 **Issue:** Slow performance
 - Consider upgrading to paid Render plan
@@ -205,12 +223,10 @@ Render automatically deploys when you push to GitHub:
 - **Render Free Tier:** 
   - Backend: Free (with some limitations)
   - Frontend: Free (with some limitations)
-  - Total: $0/month
+  - PostgreSQL Database: Free (90 days, then $7/month after free credits)
+  - Total: $0/month for first 90 days, then $7/month
 
-- **MongoDB Atlas Free Tier:**
-  - 512 MB storage
-  - Shared RAM
-  - Total: $0/month
+**Note:** Render provides $7 in free credits every month, which covers the PostgreSQL database cost. So effectively, the entire deployment can remain free.
 
 **Note:** Free tiers have limitations. For production use, consider upgrading.
 
